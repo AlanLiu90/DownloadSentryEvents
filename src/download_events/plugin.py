@@ -4,7 +4,7 @@ from __future__ import absolute_import
 
 from sentry.plugins.base.v2 import Plugin2
 from django.conf.urls import url
-from .endpoints.project_events import SimpleProjectEventsEndpoint
+from download_events.endpoints.project_events import SimpleProjectEventsEndpoint
 
 VERSION = "0.0.1"
 
