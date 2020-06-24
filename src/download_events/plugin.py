@@ -2,6 +2,8 @@
 
 from __future__ import absolute_import
 
+import logging
+
 from sentry.plugins.base.v2 import Plugin2
 from django.conf.urls import url
 from download_events.endpoints.project_events import SimpleProjectEventsEndpoint
@@ -14,6 +16,7 @@ class DownloadEventsPlugin(Plugin2):
     """
     author = 'Alan Liu'
     author_url = 'https://github.com/AlanLiu90/DownloadSentryEvents'
+    version = VERSION
     description = 'A plugin for downloading necessary event data only.'
     resource_links = [
         ('Source', 'https://github.com/AlanLiu90/DownloadSentryEvents'),
@@ -26,6 +29,7 @@ class DownloadEventsPlugin(Plugin2):
     conf_key = slug
     conf_title = title
     project_default_enabled = True
+    logger = logging.getLogger("sentry.plugins.DownloadEvents")
 
     def setup(self, bindings):
         self.logger.info("DownloadEventsPlugin.setup")
