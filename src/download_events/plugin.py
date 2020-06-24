@@ -14,7 +14,6 @@ class DownloadEventsPlugin(Plugin2):
     """
     author = 'Alan Liu'
     author_url = 'https://github.com/AlanLiu90/DownloadSentryEvents'
-    version = VERSION
     description = 'A plugin for downloading necessary event data only.'
     resource_links = [
         ('Source', 'https://github.com/AlanLiu90/DownloadSentryEvents'),
@@ -26,6 +25,10 @@ class DownloadEventsPlugin(Plugin2):
     title = 'DownloadEvents'
     conf_key = slug
     conf_title = title
+    project_default_enabled = True
+
+    def setup(self, bindings):
+        self.logger.info("DownloadEventsPlugin.setup")
 
     def get_url_module(self):
         self.logger.info("DownloadEventsPlugin.get_url_module")
