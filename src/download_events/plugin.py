@@ -4,13 +4,13 @@ from __future__ import absolute_import
 
 import logging
 
-from sentry.plugins.base.v2 import Plugin2
+from sentry.plugins.base.v1 import Plugin
 from django.conf.urls import url
 from download_events.endpoints.project_events import SimpleProjectEventsEndpoint
 
 VERSION = "0.0.1"
 
-class DownloadEventsPlugin(Plugin2):
+class DownloadEventsPlugin(Plugin):
     """
     A plugin for downloading necessary event data only.
     """
@@ -33,10 +33,6 @@ class DownloadEventsPlugin(Plugin2):
 
     def setup(self, bindings):
         self.logger.info("DownloadEventsPlugin.setup")
-
-    def get_url_module(self):
-        self.logger.info("DownloadEventsPlugin.get_url_module")
-        return "download_events.urls"
 
     def get_project_urls(self):
         self.logger.info("DownloadEventsPlugin.get_project_urls")

@@ -1,12 +1,53 @@
 from __future__ import absolute_import
 
+import six
+
 from functools import partial
 
 from sentry import eventstore
 from sentry.api.base import DocSection
 from sentry.api.bases.project import ProjectEndpoint
-from sentry.api.serializers import EventSerializer, serialize, SimpleEventSerializer
+from sentry.api.serializers import EventSerializer, serialize
 from sentry.utils.apidocs import scenario, attach_scenarios
+
+class SimpleEventSerializer(EventSerializer):
+    """
+    Simple event serializer that renders a basic outline of an event without
+    most interfaces/breadcrumbs. This can be used for basic event list queries
+    where we don't need the full detail. The side effect is that, if the
+    serialized events are actually SnubaEvents, we can render them without
+    needing to fetch the event bodies from nodestore.
+
+    NB it would be super easy to inadvertently add a property accessor here
+    that would require a nodestore lookup for a SnubaEvent serialized using
+    this serializer. You will only really notice you've done this when the
+    organization event search API gets real slow.
+    """
+
+    def get_attrs(self, item_list, user):
+        crash_files = get_crash_files(item_list)
+        return {
+            event: {"crash_file": serialize(crash_files.get(event.event_id), user=user)}
+            for event in item_list
+        }
+
+    def serialize(self, obj, attrs, user):
+        tags = [{"key": key.split("sentry:", 1)[-1], "value": value} for key, value in obj.tags]
+        for tag in tags:
+            query = convert_user_tag_to_query(tag["key"], tag["value"])
+            if query:
+                tag["query"] = query
+
+        user = obj.get_minimal_user()
+
+        return {
+            "event.type": six.text_type(obj.get_event_type()),
+            # XXX for 'message' this doesn't do the proper resolution of logentry
+            # etc. that _get_legacy_message_with_meta does.
+            "message": obj.message,
+            "tags": tags,
+            "dateCreated": obj.datetime.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        }
 
 class SimpleProjectEventsEndpoint(ProjectEndpoint):
     doc_section = DocSection.EVENTS
@@ -18,11 +59,6 @@ class SimpleProjectEventsEndpoint(ProjectEndpoint):
 
         Return a list of events bound to a project.
 
-        Note: This endpoint is experimental and may be removed without notice.
-
-        :qparam bool full: if this is set to true then the event payload will
-                           include the full event body, including the stacktrace.
-                           Set to 1 to enable.
 
         :pparam string organization_slug: the slug of the organization the
                                           groups belong to.
@@ -38,15 +74,13 @@ class SimpleProjectEventsEndpoint(ProjectEndpoint):
                 [["positionCaseInsensitive", ["message", "'%s'" % (query,)]], "!=", 0]
             )
 
-        full = request.GET.get("full", False)
-
         data_fn = partial(
             eventstore.get_events,
             filter=eventstore.Filter(conditions=conditions, project_ids=[project.id]),
             referrer="api.project-events",
         )
 
-        serializer = EventSerializer() if full else SimpleEventSerializer()
+        serializer = SimpleEventSerializer()
         return self.paginate(
             request=request,
             on_results=lambda results: serialize(results, request.user, serializer),
