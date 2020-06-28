@@ -8,7 +8,18 @@ from sentry import eventstore
 from sentry.api.base import DocSection
 from sentry.api.bases.project import ProjectEndpoint
 from sentry.api.serializers import EventSerializer, serialize
+from sentry.search.utils import convert_user_tag_to_query
 from sentry.utils.apidocs import scenario, attach_scenarios
+
+def get_crash_files(events):
+    event_ids = [x.event_id for x in events if x.platform == "native"]
+    rv = {}
+    if event_ids:
+        attachments = EventAttachment.objects.filter(event_id__in=event_ids).select_related("file")
+        for attachment in attachments:
+            if attachment.file.type in CRASH_FILE_TYPES:
+                rv[attachment.event_id] = attachment
+    return rv
 
 class SimpleEventSerializer(EventSerializer):
     """
