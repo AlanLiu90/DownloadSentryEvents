@@ -2,8 +2,6 @@
 
 from __future__ import absolute_import
 
-import logging
-
 from sentry.plugins.base.v1 import Plugin
 from django.conf.urls import url
 from download_events.endpoints.project_events import SimpleProjectEventsEndpoint
@@ -29,13 +27,8 @@ class DownloadEventsPlugin(Plugin):
     conf_key = slug
     conf_title = title
     project_default_enabled = True
-    logger = logging.getLogger("sentry.plugins.DownloadEvents")
-
-    def setup(self, bindings):
-        self.logger.info("DownloadEventsPlugin.setup")
 
     def get_project_urls(self):
-        self.logger.info("DownloadEventsPlugin.get_project_urls")
         return [url(
             r"^simple-events/$",
             SimpleProjectEventsEndpoint.as_view(),

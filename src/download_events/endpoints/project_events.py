@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import six
+import traceback
 
 from functools import partial
 from datetime import datetime
@@ -53,7 +54,39 @@ class SimpleEventSerializer(EventSerializer):
         if isinstance(event_dict["datetime"], datetime):
             event_dict["datetime"] = event_dict["datetime"].strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
-        return {
+        stacktrace = None
+        if event_dict["level"] == "error":
+            try:
+                raw_stacktrace = None
+                if "exception" in event_dict:
+                    raw_stacktrace = event_dict["exception"]["values"][0]["stacktrace"]["frames"]
+                elif "threads" in event_dict:
+                    raw_stacktrace = event_dict["threads"]["values"][0]["stacktrace"]["frames"]
+
+                if raw_stacktrace is not None:
+                    stacktrace = []
+                    for raw_frame in raw_stacktrace:
+                        module = raw_frame.get("module")
+                        function = raw_frame.get("function")
+                        abs_path = raw_frame.get("abs_path")
+                        lineno = raw_frame.get("lineno")
+
+                        frame = {}
+                        if module is not None:
+                            frame["module"] = module
+                        if function is not None:
+                            frame["function"] = function
+                        if abs_path is not None:
+                            frame["abs_path"] = abs_path
+                        if lineno is not None:
+                            frame["lineno"] = lineno
+
+                        stacktrace.append(frame)
+            except:
+                traceback.print_exc()
+                stacktrace = None
+
+        ret = {
             "level": event_dict["level"],
             # XXX for 'message' this doesn't do the proper resolution of logentry
             # etc. that _get_legacy_message_with_meta does.
@@ -61,6 +94,11 @@ class SimpleEventSerializer(EventSerializer):
             "tags": event_dict["tags"],
             "datetime": event_dict["datetime"],
         }
+
+        if stacktrace is not None:
+            ret["stacktrace"] = stacktrace
+
+        return ret
 
 class SimpleProjectEventsEndpoint(ProjectEndpoint):
     doc_section = DocSection.EVENTS
