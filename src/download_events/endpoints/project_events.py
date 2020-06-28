@@ -9,8 +9,11 @@ from sentry import eventstore
 from sentry.api.base import DocSection
 from sentry.api.bases.project import ProjectEndpoint
 from sentry.api.serializers import EventSerializer, serialize
+from sentry.models import EventAttachment
 from sentry.search.utils import convert_user_tag_to_query
 from sentry.utils.apidocs import scenario, attach_scenarios
+
+CRASH_FILE_TYPES = set(["event.minidump"])
 
 def get_crash_files(events):
     event_ids = [x.event_id for x in events if x.platform == "native"]
