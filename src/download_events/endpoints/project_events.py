@@ -3,6 +3,7 @@ from __future__ import absolute_import
 import six
 
 from functools import partial
+from datetime import datetime
 
 from sentry import eventstore
 from sentry.api.base import DocSection
@@ -43,21 +44,19 @@ class SimpleEventSerializer(EventSerializer):
         }
 
     def serialize(self, obj, attrs, user):
-        tags = [{"key": key.split("sentry:", 1)[-1], "value": value} for key, value in obj.tags]
-        for tag in tags:
-            query = convert_user_tag_to_query(tag["key"], tag["value"])
-            if query:
-                tag["query"] = query
+        event = eventstore.get_event_by_id(obj.project_id, obj.event_id)
 
-        user = obj.get_minimal_user()
+        event_dict = event.as_dict()
+        if isinstance(event_dict["datetime"], datetime):
+            event_dict["datetime"] = event_dict["datetime"].strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
         return {
-            "event.type": six.text_type(obj.get_event_type()),
+            "level": event_dict["level"],
             # XXX for 'message' this doesn't do the proper resolution of logentry
             # etc. that _get_legacy_message_with_meta does.
-            "message": obj.message,
-            "tags": tags,
-            "dateCreated": obj.datetime.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+            "message": event_dict["message"],
+            "tags": event_dict["tags"],
+            "datetime": event_dict["datetime"],
         }
 
 class SimpleProjectEventsEndpoint(ProjectEndpoint):
