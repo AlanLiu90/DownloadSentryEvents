@@ -24,7 +24,7 @@ setup(
     ],
     entry_points={
         'sentry.plugins': [
-            'download_sentry_events = download_events.plugin:DownloadEventsPlugin'
+            'download_sentry_events = download_sentry_events.plugin:DownloadEventsPlugin'
         ]
     },
     classifiers=[

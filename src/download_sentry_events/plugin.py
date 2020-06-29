@@ -4,7 +4,7 @@ from __future__ import absolute_import
 
 from sentry.plugins.base.v1 import Plugin
 from django.conf.urls import url
-from download_events.endpoints.project_events import SimpleProjectEventsEndpoint
+from download_sentry_events.endpoints.project_events import SimpleProjectEventsEndpoint
 
 VERSION = "0.0.1"
 
@@ -22,8 +22,8 @@ class DownloadEventsPlugin(Plugin):
         ('README', 'https://github.com/AlanLiu90/DownloadSentryEvents/blob/master/README.md'),
     ]
 
-    slug = 'DownloadEvents'
-    title = 'DownloadEvents'
+    slug = 'download-events'
+    title = 'download-events'
     conf_key = slug
     conf_title = title
     project_default_enabled = True
