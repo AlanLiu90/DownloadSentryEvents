@@ -6,9 +6,12 @@ import traceback
 from functools import partial
 from datetime import datetime
 
+from django.utils import timezone
+
 from sentry import eventstore
 from sentry.api.base import DocSection
 from sentry.api.bases.project import ProjectEndpoint
+from sentry.api.event_search import get_filter
 from sentry.api.serializers import EventSerializer, serialize
 from sentry.models import EventAttachment
 from sentry.search.utils import convert_user_tag_to_query
@@ -158,16 +161,20 @@ class SimpleProjectEventsEndpoint(ProjectEndpoint):
         """
         from sentry.api.paginator import GenericOffsetPaginator
 
-        query = request.GET.get("query")
-        conditions = []
-        if query:
-            conditions.append(
-                [["positionCaseInsensitive", ["message", "'%s'" % (query,)]], "!=", 0]
-            )
+        environment = request.GET.get("environment")
+        start = request.GET.get("start")
+        end = request.GET.get("end")
+
+        params = { "project_id" : [ project.id ] }
+        if environment is not None:
+            params["environment"] = [ environment ]
+        if start is not None and end is not None:
+            params["start"] = datetime.strptime(start, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
+            params["end"] = datetime.strptime(end, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
 
         data_fn = partial(
             eventstore.get_events,
-            filter=eventstore.Filter(conditions=conditions, project_ids=[project.id]),
+            filter=get_filter(params=params),
             referrer="api.project-events",
         )
 
