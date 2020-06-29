@@ -57,48 +57,88 @@ class SimpleEventSerializer(EventSerializer):
         stacktrace = None
         if event_dict["level"] == "error":
             try:
-                raw_stacktrace = None
                 if "exception" in event_dict:
-                    raw_stacktrace = event_dict["exception"]["values"][0]["stacktrace"]["frames"]
+                    exceptions = event_dict["exception"]["values"]
+
+                    stacktrace = ""
+                    for i in range(len(exceptions)):
+                        exception = exceptions[i]
+                        current = ""
+                        if i < len(exceptions) - 1:
+                            current = " ---> "
+
+                        current = current + "%s: %s" % (exception["type"], exception["value"])
+                        if i > 0:
+                            current = current + "\n"
+
+                        stacktrace = current + stacktrace
+
+                    for i in range(len(exceptions)):
+                        exception = exceptions[i]
+
+                        if i > 0:
+                            stacktrace = stacktrace + "\n   --- End of inner exception stack trace ---"
+
+                        raw_stacktrace = exception.get("stacktrace")
+                        if raw_stacktrace is not None:
+                            stacktrace = stacktrace + "\n" + self.format_stackframes(raw_stacktrace["frames"])
                 elif "threads" in event_dict:
-                    raw_stacktrace = event_dict["threads"]["values"][0]["stacktrace"]["frames"]
-
-                if raw_stacktrace is not None:
-                    stacktrace = []
-                    for raw_frame in raw_stacktrace:
-                        module = raw_frame.get("module")
-                        function = raw_frame.get("function")
-                        abs_path = raw_frame.get("abs_path")
-                        lineno = raw_frame.get("lineno")
-
-                        frame = {}
-                        if module is not None:
-                            frame["module"] = module
-                        if function is not None:
-                            frame["function"] = function
-                        if abs_path is not None:
-                            frame["abs_path"] = abs_path
-                        if lineno is not None:
-                            frame["lineno"] = lineno
-
-                        stacktrace.append(frame)
+                    for value in event_dict["threads"]["values"]:
+                        if value.get("current", False):
+                            raw_stacktrace = value.get("stacktrace")
+                            if raw_stacktrace is not None:
+                                stacktrace = self.format_stackframes(raw_stacktrace["frames"])
+                            break
             except:
                 traceback.print_exc()
+                # print event_dict
+
                 stacktrace = None
 
         ret = {
             "level": event_dict["level"],
-            # XXX for 'message' this doesn't do the proper resolution of logentry
-            # etc. that _get_legacy_message_with_meta does.
-            "message": event_dict["message"],
-            "tags": event_dict["tags"],
             "datetime": event_dict["datetime"],
         }
 
+        tags = event_dict.get("tags")
+        if tags is not None:
+            tags = { tag[0] : tag[1] for tag in tags }
+            if "client-version" in tags:
+                ret["client"] = "[client:%s_%s_%s]" % (tags["player-id"], tags["player-name"], tags["client-version"])
+            elif "node-id" in tags:
+                service_handle = tags.get("service-handle", 0)
+                service_name = tags.get("service-name", "")
+                ret["server"] = "[%s:%d_%s]" % (tags["node-id"], service_handle, service_name)
+
         if stacktrace is not None:
-            ret["stacktrace"] = stacktrace
+            ret["message"] = event_dict["message"] + "\n" + stacktrace
+        else:
+            ret["message"] = event_dict["message"],
 
         return ret
+
+    def format_stackframes(self, frames):
+        formatted_frames = ""
+        for i in range(len(frames)):
+            raw_frame = frames[i]
+            module = raw_frame.get("module")
+            function = raw_frame.get("function")
+            abs_path = raw_frame.get("abs_path")
+            lineno = raw_frame.get("lineno")
+
+            frame = ""
+
+            if module is not None and function is not None:
+                frame = "   at %s.%s" % (module, function)
+            if abs_path is not None and lineno is not None:
+                frame = frame + " in %s:line %d" % (abs_path, lineno)
+
+            if i > 0:
+                frame = frame + "\n"
+
+            formatted_frames = frame + formatted_frames
+
+        return formatted_frames
 
 class SimpleProjectEventsEndpoint(ProjectEndpoint):
     doc_section = DocSection.EVENTS
