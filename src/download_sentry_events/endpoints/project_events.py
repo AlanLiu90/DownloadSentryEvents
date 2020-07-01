@@ -6,6 +6,7 @@ import traceback
 from functools import partial
 from datetime import datetime
 
+from django.http import StreamingHttpResponse
 from django.utils import timezone
 
 from sentry import eventstore
@@ -16,6 +17,8 @@ from sentry.api.serializers import EventSerializer, serialize
 from sentry.models import EventAttachment
 from sentry.search.utils import convert_user_tag_to_query
 from sentry.utils.apidocs import scenario, attach_scenarios
+
+from rest_framework.exceptions import ParseError
 
 CRASH_FILE_TYPES = set(["event.minidump"])
 
@@ -54,8 +57,7 @@ class SimpleEventSerializer(EventSerializer):
         event = eventstore.get_event_by_id(obj.project_id, obj.event_id)
 
         event_dict = event.as_dict()
-        if isinstance(event_dict["datetime"], datetime):
-            event_dict["datetime"] = event_dict["datetime"].strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        event_dict["datetime"] = event_dict["datetime"].strftime("%Y-%m-%d %H:%M:%S.%f")[:-2]
 
         stacktrace = None
         if event_dict["level"] == "error":
@@ -116,9 +118,9 @@ class SimpleEventSerializer(EventSerializer):
         if stacktrace is not None:
             ret["message"] = event_dict["message"] + "\n" + stacktrace
         else:
-            ret["message"] = event_dict["message"],
+            ret["message"] = event_dict["message"]
 
-        return ret
+        return self.format_data(ret)
 
     def format_stackframes(self, frames):
         formatted_frames = ""
@@ -143,6 +145,21 @@ class SimpleEventSerializer(EventSerializer):
 
         return formatted_frames
 
+    def format_data(self, data):
+        level = data["level"].capitalize()
+        if level == "Warning":
+            level = "Warn"
+
+        text = "%s %s" % (level, data["datetime"])
+        if "client" in data:
+            text = "%s %s" % (text, data["client"])
+        elif "server" in data:
+            text = "%s %s" % (text, data["server"])
+
+        text = "%s --- %s\n" % (text, data["message"])
+
+        return text
+
 class SimpleProjectEventsEndpoint(ProjectEndpoint):
     doc_section = DocSection.EVENTS
 
@@ -151,7 +168,7 @@ class SimpleProjectEventsEndpoint(ProjectEndpoint):
         List a Project's Events
         ```````````````````````
 
-        Return a list of events bound to a project.
+        Return events bound to a project.
 
 
         :pparam string organization_slug: the slug of the organization the
@@ -175,12 +192,42 @@ class SimpleProjectEventsEndpoint(ProjectEndpoint):
         data_fn = partial(
             eventstore.get_events,
             filter=get_filter(params=params),
-            referrer="api.project-events",
+            orderby=['timestamp'],
+            referrer="api.project-simple-events",
         )
 
         serializer = SimpleEventSerializer()
-        return self.paginate(
+        response = StreamingHttpResponse(self.stream(
             request=request,
             on_results=lambda results: serialize(results, request.user, serializer),
             paginator=GenericOffsetPaginator(data_fn=data_fn),
-        )
+        ), content_type="text/plain")
+
+        response['Content-Disposition'] = 'attachment; filename="events.txt"'
+        return response
+
+    def stream(self, request, on_results, paginator, default_per_page = 100, max_per_page = 100):
+        try:
+            per_page = int(request.GET.get("per_page", default_per_page))
+        except ValueError:
+            raise ParseError(detail="Invalid per_page parameter.")
+
+        max_per_page = max(max_per_page, default_per_page)
+        if per_page > max_per_page:
+            raise ParseError(
+                detail="Invalid per_page value. Cannot exceed {}.".format(max_per_page)
+            )
+
+        input_cursor = None
+
+        while True:
+            cursor_result = paginator.get_result(limit=per_page, cursor=input_cursor)
+
+            results = on_results(cursor_result.results)
+            for event in results:
+                yield event
+
+            if not cursor_result.next.has_results:
+                break
+
+            input_cursor = cursor_result.next
