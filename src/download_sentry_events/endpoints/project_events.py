@@ -62,7 +62,6 @@ class SimpleEventSerializer(EventSerializer):
         event = eventstore.get_event_by_id(obj.project_id, obj.event_id)
 
         event_dict = event.as_dict()
-        print event_dict["datetime"]
 
         dt = event_dict["datetime"]
         if self.tzoffset is not None:
