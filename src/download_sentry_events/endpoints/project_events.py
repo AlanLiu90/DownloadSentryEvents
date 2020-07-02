@@ -4,7 +4,7 @@ import six
 import traceback
 
 from functools import partial
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.http import StreamingHttpResponse
 from django.utils import timezone
@@ -46,6 +46,11 @@ class SimpleEventSerializer(EventSerializer):
     organization event search API gets real slow.
     """
 
+    tzoffset = None
+
+    def __init__(self, tzoffset):
+        self.tzoffset = tzoffset
+
     def get_attrs(self, item_list, user):
         crash_files = get_crash_files(item_list)
         return {
@@ -57,7 +62,13 @@ class SimpleEventSerializer(EventSerializer):
         event = eventstore.get_event_by_id(obj.project_id, obj.event_id)
 
         event_dict = event.as_dict()
-        event_dict["datetime"] = event_dict["datetime"].strftime("%Y-%m-%d %H:%M:%S.%f")[:-2]
+        print event_dict["datetime"]
+
+        dt = event_dict["datetime"]
+        if self.tzoffset is not None:
+            dt = dt + self.tzoffset
+
+        event_dict["datetime"] = dt.strftime("%Y-%m-%d %H:%M:%S.%f")[:-2]
 
         stacktrace = None
         if event_dict["level"] == "error":
@@ -181,6 +192,7 @@ class SimpleProjectEventsEndpoint(ProjectEndpoint):
         environment = request.GET.get("environment")
         start = request.GET.get("start")
         end = request.GET.get("end")
+        tzoffset = None
 
         params = { "project_id" : [ project.id ] }
         if environment is not None:
@@ -189,6 +201,10 @@ class SimpleProjectEventsEndpoint(ProjectEndpoint):
             params["start"] = datetime.strptime(start, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
             params["end"] = datetime.strptime(end, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
 
+            tzoffset = request.GET.get("tzoffset")
+            if tzoffset is not None:
+                tzoffset = timedelta(minutes=int(tzoffset))
+
         data_fn = partial(
             eventstore.get_events,
             filter=get_filter(params=params),
@@ -196,7 +212,7 @@ class SimpleProjectEventsEndpoint(ProjectEndpoint):
             referrer="api.project-simple-events",
         )
 
-        serializer = SimpleEventSerializer()
+        serializer = SimpleEventSerializer(tzoffset)
         response = StreamingHttpResponse(self.stream(
             request=request,
             on_results=lambda results: serialize(results, request.user, serializer),
