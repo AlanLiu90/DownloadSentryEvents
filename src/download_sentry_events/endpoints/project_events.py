@@ -119,11 +119,15 @@ class SimpleEventSerializer(EventSerializer):
         if tags is not None:
             tags = { tag[0] : tag[1] for tag in tags }
             if "client-version" in tags:
-                ret["client"] = "[client:%s_%s_%s]" % (tags["player-id"], tags["player-name"], tags["client-version"])
+                player_id = tags.get("player-id", "")
+                player_name = tags.get("player-name", "")
+                client_version = tags.get("client-version", "")
+                ret["client"] = "[client:%s_%s_%s]" % (player_id, player_name, client_version)
             elif "node-id" in tags:
+                node_id = tags.get("node-id", "")
                 service_handle = tags.get("service-handle", "0")
                 service_name = tags.get("service-name", "")
-                ret["server"] = "[%s:%s_%s]" % (tags["node-id"], service_handle, service_name)
+                ret["server"] = "[%s:%s_%s]" % (node_id, service_handle, service_name)
 
         if stacktrace is not None:
             ret["message"] = event_dict["message"] + "\n" + stacktrace
