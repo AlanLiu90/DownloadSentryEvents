@@ -16,6 +16,7 @@ from sentry.api.event_search import get_filter
 from sentry.api.serializers import EventSerializer, serialize
 from sentry.models import EventAttachment
 from sentry.search.utils import convert_user_tag_to_query
+from sentry.snuba.events import Columns
 from sentry.utils.apidocs import scenario, attach_scenarios
 
 from rest_framework.exceptions import ParseError
@@ -211,7 +212,7 @@ class SimpleProjectEventsEndpoint(ProjectEndpoint):
         data_fn = partial(
             eventstore.get_events,
             filter=get_filter(params=params),
-            orderby=['timestamp'],
+            orderby=[TIMESTAMP],
             referrer="api.project-simple-events",
         )
 
@@ -225,7 +226,7 @@ class SimpleProjectEventsEndpoint(ProjectEndpoint):
         response['Content-Disposition'] = 'attachment; filename="events.txt"'
         return response
 
-    def stream(self, request, on_results, paginator, default_per_page = 100, max_per_page = 100):
+    def stream(self, request, on_results, paginator, default_per_page = 100, max_per_page = 1000):
         try:
             per_page = int(request.GET.get("per_page", default_per_page))
         except ValueError:
